@@ -1,2 +1,6 @@
 # hello-world
-Hello-world repository
+Buon giorno.
+Howdy.
+ayup.
+
+Welcome to the hello-world repository
