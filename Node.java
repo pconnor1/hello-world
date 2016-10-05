@@ -42,14 +42,17 @@ public class Node extends Fact {
   }
 
   public String toCommand() {
-    return ("add "+Label.replace(" ","_")+" "+nodeName.replace(" ", "_"));
+    //con label return ("add "+Label.replace(" ","_")+" "+nodeName.replace(" ", "_"));
+    return ("add "+nodeName.replace(" ", "_"));
   }
 
   public String toString() {
-    return (Label +" "+nodeName);
+    //con label return (Label +" "+nodeName);
+    return (nodeName);
   }
 
   public String toFbItem() {
-    return ("n::"+ID+"::"+Label.replace(" ", "_")+"::"+nodeName.replace(" ", "_"));
+    //con label return ("n::"+ID+"::"+Label.replace(" ", "_")+"::"+nodeName.replace(" ", "_"));
+    return ("n::"+ID+"::"+nodeName.replace(" ", "_"));
   }
 }

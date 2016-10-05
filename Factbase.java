@@ -11,22 +11,8 @@ import java.util.*;
 
 public class Factbase {
 
-  static ArrayList<String>  nodeLabels;
-  static ArrayList<String>  nodeNames;
-  static ArrayList<Integer> nodeIDs;
-  static ArrayList<Integer> attrIDs;
-  static ArrayList<String>  attrLabelAs;
-  static ArrayList<Integer> edgeIDs;
-  static ArrayList<Integer> edgeANodes;
-  static ArrayList<Integer> edgeBNodes;
-  static ArrayList<Integer> edgeAttrs;
-
   static ArrayList<String>  nodeStack; // this is used for describe nodes. 
   
-  static int                numItems = 0;
-  static int                numNodes = 0;
-  static int                numAttrs = 0;
-  static int                numEdges = 0;
   static Factbase           p;
 
   public static void main(String[] args) {
@@ -35,22 +21,22 @@ public class Factbase {
     p.run();
   }
 
+  //new (adds labels, returns to one-way attrs)
+  // node: n::ID::label::name
+  // attribute: a::ID::label::name
+  // edge: e::ID::srcNodeID::dstNodeID::attrID
+  //old (still in effect cos new is buggy) 
   // node: n::ID::name
   // attribute: a::ID::labelA::labelB
   // edge: e::ID::srcNodeID::dstNodeID::attrID
   public void init() {
-    nodeLabels  = new ArrayList<String>();
-    nodeNames   = new ArrayList<String>();
-    nodeIDs     = new ArrayList<Integer>();
-    attrIDs     = new ArrayList<Integer>();
-    attrLabelAs = new ArrayList<String>();
-    edgeIDs     = new ArrayList<Integer>();
-    edgeANodes  = new ArrayList<Integer>();
-    edgeBNodes  = new ArrayList<Integer>();
-    edgeAttrs   = new ArrayList<Integer>();
+    nodes = new ArrayList<Node>();
+    attrs = new ArrayList<Attr>();
+    edges = new ArrayList<Edge>();
 
     nodeStack   = new ArrayList<String>();
-
+    
+    openLog();
   }
 
   public void run() {
@@ -58,7 +44,6 @@ public class Factbase {
     //load();// load the priority list
     loadText("factsOut.txt");
     showsize();
-    objDemo();   
     while (!(inputLine.equals("quit"))) {
       inputLine = fbase.Helper.getUserInput("cmd>");
       if (!(inputLine == null)) {
@@ -74,64 +59,6 @@ public class Factbase {
   static ArrayList<Attr>  attrs;
   static ArrayList<Edge>  edges;
   
-  public void objDemo() {
-    
-    nodes = new ArrayList<Node>();
-    attrs = new ArrayList<Attr>();
-    edges = new ArrayList<Edge>();
-    
-    System.out.println();
-    System.out.println("objDemo:Begin");
-    System.out.println();
-    
-    nodes.add(new Node("Generic Node","Node A",0));
-    System.out.println("Nodes[0]: "+nodes.get(0).toString());
-    nodes.add(new Node("Generic Node","Node B",1));
-    System.out.println("Nodes[1]: "+nodes.get(1).toString());
-    attrs.add(new Attr("definition", "is", 2));
-    System.out.println("Attrs[0]: "+attrs.get(0).toString());
-    edges.add(new Edge(nodes.get(0),nodes.get(1),attrs.get(0),3));
-    System.out.println("Edges[0]: "+edges.get(0).toString());
-
-    System.out.println();
-    System.out.println("Renaming Nodes[0] - making no change to Edges[0]");
-    nodes.get(0).setNodeName("Peanut");
-    System.out.println("Nodes[0]: "+nodes.get(0).toString());
-    System.out.println("Edges[0]: "+edges.get(0).toString());
-    System.out.println("Edges[0] picked up the rename automatically");
-
-    System.out.println();
-    System.out.println(nodes.get(0).toFbItem());
-    System.out.println(nodes.get(1).toFbItem());
-    System.out.println(attrs.get(0).toFbItem());
-    System.out.println(edges.get(0).toFbItem());
-
-    System.out.println();
-    System.out.println("Finding node 1");
-    for (int t=0; t<nodes.size(); t++) {
-      if (nodes.get(t).getID()==1) {
-        System.out.println("found node ID 1: "+nodes.get(t).toString());
-      }
-    }
-
-    System.out.println();
-    System.out.println("Commands:");
-    System.out.println();
-    for (int t=0; t<nodes.size(); t++) {
-      System.out.println(nodes.get(t).toCommand());
-    }
-    for (int t=0; t<attrs.size(); t++) {
-      System.out.println(attrs.get(t).toCommand());
-    }
-    for (int t=0; t<edges.size(); t++) {
-      System.out.println(edges.get(t).toCommand());
-    }
-
-    System.out.println();
-    System.out.println("objDemo:End");
-    System.out.println();
-    
-  }
   /**
    * Top level parser
    * 
@@ -186,11 +113,12 @@ public class Factbase {
     }
     if ((!parsed) && (i.contains("add "))) {
       // System.out.println(i+": not implemented");
-      add(i);
+      nodes.add(new Node("Generic Node",i.replace("add ",""),nextID()));
       parsed = true;
     }
+    //attr
     if ((!parsed) && (i.contains("attr "))) {
-      attr(i);
+      attrs.add(new Attr("definition", i.replace("attr ",  ""), nextID()));
       parsed = true;
     }
     if ((!parsed) && (i.contains("describe all"))) {
@@ -248,45 +176,48 @@ public class Factbase {
     }
     if (!parsed) {
       System.out.println(i + ": not understood");
-      System.out.println("parseinfo:\n"+parse2output);
+//      System.out.println("parseinfo:\n"+parse2output);
     }
   }
 
-  /** Secondary pre-parser
+  /** Secondary pre-parser called from parse2
    * 
    * @param j
    * @return
    */
   public String parse1a(String j) {
-    parse2output = parse2output + ("\nP1A:   raw: \""+j+"\""+"\n");
+    parse2output = parse2output + ("\nP1A:      raw: \""+j+"\""+"\n");
     String retval = j;
     String k = j.replaceAll("  ", " ").replaceAll(" ",  "_");
     String k3 = j.replaceAll("  ", " ");
     String ktemp = "";
-    parse2output = parse2output + ("\nP1A: clean: \""+k+"\""+"\n");
-    for (int t=0; t<numNodes; t++) {
-      String k2=nodeNames.get(t);
+    parse2output = parse2output + ("\nP1A:    clean: \""+k+"\""+"\n");
+    for (int t=0; t<nodes.size(); t++) {
+      String k2=nodes.get(t).getNodeName();
+      parse2output = parse2output + ("P1A:(n)     Does k: "+k+"\n");
+      parse2output = parse2output + ("P1A:(n) contain k2: "+k2+"\n");
       if (k.contains(k2)) {
-        parse2output = parse2output + ("P1A: Node "+k2+"\n");
+        parse2output = parse2output + ("P1A:(n) Node "+k2+"\n");
         ktemp = k2.replace("_", " ");
         k3 = k3.replace(ktemp, k2);
       }
     }
-    for (int t=0; t<numAttrs; t++) {
-      String k2=attrLabelAs.get(t);
-      parse2output = parse2output + ("P1A:     Does k: "+k+"\n");
-      parse2output = parse2output + ("P1A: contain k2: "+k2+"\n");
+    for (int t=0; t<attrs.size(); t++) {
+      String k2=attrs.get(t).getName1();
+      parse2output = parse2output + ("P1A:(a)     Does k: "+k+"\n");
+      parse2output = parse2output + ("P1A:(a) contain k2: "+k2+"\n");
       if (k.contains(k2)) {
-        parse2output = parse2output + ("P1A: Attr "+k2+"\n");
+        parse2output = parse2output + ("P1A:(a) Attr "+k2+"\n");
         ktemp = k2.replace("_", " ");
-        parse2output = parse2output + ("P1A: temp "+ktemp+"\n");
+        parse2output = parse2output + ("P1A:(a) temp "+ktemp+"\n");
         k3 = k3.replace(ktemp, k2);
-        parse2output = parse2output + ("P1A: Output now: "+k3+"\n");
+        parse2output = parse2output + ("P1A:(a) Output now: "+k3+"\n");
+        t = t + attrs.size();
       }
     }
     //System.out.println();
     retval = k3;
-    parse2output = parse2output + ("P1A: Revised: "+retval+"\n");
+    parse2output = parse2output + ("P1A:       Revised: "+retval+"\n");
     return retval.replaceAll("  ", " ");
   }
   
@@ -300,6 +231,8 @@ public class Factbase {
    */
   String parse2output = "";
   public boolean parse2(String j) {
+    log();
+    log("P2: Parsing: "+j);
     boolean retval = false;
     parse2output = "";
     String j2 = parse1a(j);
@@ -307,8 +240,8 @@ public class Factbase {
     String pattern = "";
     for (int t = 0; t < i.length; t++) {
       boolean done = false;
-      for (int u = 0; u < numNodes; u++) {
-        if (nodeNames.get(u).equals(i[t])) {
+      for (int u = 0; u < nodes.size(); u++) {
+        if (nodes.get(u).getNodeName().equals(i[t])) {
           String i2 = i[t].replaceAll("_", " ");
           parse2output = parse2output + i2 + " (node) ";
           pattern = pattern + "N";
@@ -316,8 +249,8 @@ public class Factbase {
           done = true;
         }
       }
-      for (int u = 0; u < numAttrs; u++) {
-        if (attrLabelAs.get(u).equals(i[t])) {
+      for (int u = 0; u < attrs.size(); u++) {
+        if (attrs.get(u).getName1().equals(i[t])) {
           String i2 = i[t].replaceAll("_", " ");
           parse2output = parse2output + i2 + " (attr) ";
           pattern = pattern + "A";
@@ -334,55 +267,43 @@ public class Factbase {
     }
     if (retval) {
       retval = false;
-      //System.out.println("PATTERN: "+pattern);
+      log("P2: Pattern: "+pattern);
       if (pattern.equals("NAQ")) {
-        //output = output + "\nI think you want to create the new item: " + i[2]
-        //    + "\n" + "and create the relationship \"" + i[0] + " " + i[1] + " "
-        //    + i[2] + "\" ";
         addNode(i[2]);
         String retmsg = "Added node: "+i[2];
         parse2output = parse2output + retmsg;
-        System.out.println(retmsg.trim().replace("_", " "));
-        int nodeAA = nodeIDByName(i[0]);
-        int nodeBA = nodeIDByName(i[2]);
-        int attrAA = getAttrIDByLabel(i[1]);
-        if ((nodeAA >= 0) && (nodeBA >= 0) && (attrAA >= 0)) {
-          addEdge(Integer.toString(numItems), Integer.toString(nodeAA),
-              Integer.toString(nodeBA), Integer.toString(attrAA));
+        logAndPrint(retmsg.trim().replace("_", " "));
+        Node nodestAA=getNode(i[0]);
+        Node nodestAB=getNode(i[2]);
+        Attr attrstAA=getAttr(i[1]);
+        if ((nodestAA!=null)&&(nodestAB!=null)&&(attrstAA!=null)) {
+          edges.add(new Edge(nodestAA,nodestAB,attrstAA,nextID()));
+          logAndPrint("Added: \""+i[0]+" "+i[1]+" "+i[2]+"\"");
+        } else {
+          System.out.println("Issue adding (new item) edge: "+i[0]+" "+i[1]+" "+i[2]);
         }
         retmsg = "Added edge: \"" + i[0] + " " + i[1] + " " + i[2] + "\" ";
         parse2output = parse2output + retmsg;
-        System.out.println(retmsg.trim().replace("_", " "));
+        logAndPrint(retmsg.trim().replace("_", " "));
         retval = true;
       }
       if (pattern.equals("NAN")) {
-        parse2output = parse2output + "\n I think you want to create the relationship \"" + i[0] + " " + i[1] + " " + i[2] + "\" ";
-        //System.out.println(output);
-        // kumquat
-        int nodeA = nodeIDByName(i[0]);
-        //System.out.println("Got node 1. ID: "+nodeA);
-        int nodeB = nodeIDByName(i[2]);
-        //System.out.println("Got node 2. ID: "+nodeB);
-        int attrA = getAttrIDByLabel(i[1]);
-        //System.out.println("Got attr.   ID: "+attrA);
-        if ((nodeA >= 0) && (nodeB >= 0) && (attrA >= 0)) {
-          addEdge(Integer.toString(numItems), Integer.toString(nodeA),
-              Integer.toString(nodeB), Integer.toString(attrA));
-          retval = true;
-          String retmsg = "Added edge: \"" + i[0] + " " + i[1] + " " + i[2] + "\" ";
-          parse2output = parse2output + retmsg;
-          System.out.println(retmsg.trim().replace("_", " "));
+        Node nodestAA=getNode(i[0]);
+        Node nodestAB=getNode(i[2]);
+        Attr attrstAA=getAttr(i[1]);
+        log("MAYBE adding (plain) edge: "+i[0]+" "+i[1]+" "+i[2]);
+        if ((nodestAA!=null)&&(nodestAB!=null)&&(attrstAA!=null)) {
+          edges.add(new Edge(nodestAA,nodestAB,attrstAA,nextID()));
+          logAndPrint("Added: \""+i[0]+" "+i[1]+" "+i[2]+"\"");
+        } else {
+          log("Issue adding (plain) edge: "+i[0]+" "+i[1]+" "+i[2]);
         }
+        retval = true;
       }
       if (pattern.equals("QAN")) {
         retval = true;
-        //System.out.println(output);
-        //System.out.println("QAN: Trying: "+i[1]+", "+i[2]);
         if (!printEdgeByAttrLabelAndNodeAName(i[1], i[2])) {
-          if (!printEdgeByAttrLabelAndNodeBName(i[1], i[2])) {
-            //System.out.println("QAN: Describing: "+i[2]);
-            describe(i[2]);
-          }
+          describe(i[2]);
         }
       }
       if (pattern.equals("ANA")) {
@@ -393,6 +314,7 @@ public class Factbase {
         retval = false;
       }
     }
+    log(parse2output);
     return retval;
   }
 
@@ -425,11 +347,12 @@ public class Factbase {
 
   public void showsize() {
     System.out.println();
-    System.out.println("     nodes:" + (numNodes));
-    System.out.println("attributes:" + (numAttrs));
-    System.out.println("     edges:" + (numEdges));
-    System.out.println("     total:" + (numItems));
+    System.out.println("       nodes:" + (nodes.size()));
+    System.out.println("  attributes:" + (attrs.size()));
+    System.out.println("       edges:" + (edges.size()));
+    System.out.println("       total:" + (nodes.size()+attrs.size()+edges.size()) );
     System.out.println();
+
   }
 
   public void describe(String ds) {
@@ -437,68 +360,81 @@ public class Factbase {
     boolean isNode = false;
     boolean isAttr = false;
     String t = ds.replace("describe ", "");
-    //System.out.println("DESCRIBE: Checking nodes for:"+t);
-    nodeStack.clear();
-    isNode = describeNode(t);
-    //System.out.println("DESCRIBE: Checking attrs for:"+t);
-    isAttr = describeAttr(t);
+    isNode = nodeExists(t);
+    isAttr = attrAExists(t);
     if (!((isNode) || (isAttr))) {
       System.out.println("Can't find anything about \"" + (t) + "\"");
+    } else {
+      System.out.println(t + " exists");
     }
+    if (isNode) { 
+      nodeStack.clear();
+      describeNode(t); 
+    }
+    if (isAttr) {describeAttr(t); }
   }
 
   public void describeMore() {
-    if(nodeStack.size()>0) {
-      System.out.println("More about "+nodeStackName+":");
-      for (int t=0; t<nodeStack.size();  t++) {
+    log();
+    // because Describe adds to the nodestack, we take the original 
+    // contents of the nodestack and ignore add-ons.
+    int nodeStackSize=nodeStack.size();
+    logAndPrint("More about "+nodeStackName+":");
+    if(nodeStackSize>0) {
+      log("NodeStack contains:");
+      for (int t=0; t<nodeStackSize;  t++) {
+        log(nodeStack.get(t));
         describeNode(nodeStack.get(t));
       }
       nodeStack.clear();
     } else {
-      System.out.println("No more");
+      logAndPrint("No more");
     }
   }
 
   String nodeStackName="";
-  public boolean describeNode(String t) {
-    nodeStackName=t;
-    boolean nodeExists = false;
-    int dd = nodeIndex(t.replace(" ", "_"));
-    if (dd >= 0) {
-      //System.out.println(t);
-      int currentNodeID = nodeIDs.get(dd);
-      // and print all edges
-      if (numEdges > 0) {
-        for (int fe = 0; fe < numEdges; fe++) {
-          // edge: e::ID::srcNodeID::dstNodeID::attrID
-          // int fxEdge = edgeIDs.get(fe);
-          int fxNode1 = edgeANodes.get(fe);
-          int fxNode2 = edgeBNodes.get(fe);
-          int fxAttr = edgeAttrs.get(fe);
-          if (fxNode1 == currentNodeID) {
-            int fx2Index = getNodeIndexByID(fxNode2);
-            if (fx2Index > -1) {
-              for (int fb = 0; fb < numAttrs; fb++) {
-                if (attrIDs.get(fb) == fxAttr) {
-                  System.out.println(t + " " + 
-                       attrLabelAs.get(fb).replace("_", " ") + " " + 
-                       nodeNames.get(fx2Index).replace("_", " "));
-                  for (int tx=0; tx<nodeStack.size(); tx++) {
-                    if (nodeStack.get(tx).equals(nodeNames.get(fx2Index))) {
-                      nodeExists = true;
-                    }
-                  }
-                  if (!nodeExists){nodeStack.add(nodeNames.get(fx2Index));} //orange
-                }
-              }
-            }
-          }
-        }
-      }
-      nodeExists = true;
-    }
-    return nodeExists;
-  }
+  public boolean describeNode(String t) { 
+  nodeStackName=t; 
+  boolean nodeExists = false; 
+  int dd = nodeIndex(t.replace(" ", "_")); 
+  if (dd >= 0) { 
+    int currentNodeID = nodes.get(dd).getID(); 
+    // and print all edges 
+    if (edges.size() > 0) { 
+      for (int fe = 0; fe < edges.size(); fe++) { 
+        // edge: e::ID::srcNodeID::dstNodeID::attrID 
+        // int fxEdge = edgeIDs.get(fe);
+        Edge qq = edges.get(fe); 
+        int fxNode1 = qq.getN1().getID(); 
+        int fxNode2 = qq.getN2().getID(); 
+        int fxAttr = qq.getA1().getID(); 
+        if (fxNode1 == currentNodeID) { 
+          int fx2Index = getNodeIndexByID(fxNode2); 
+          if (fx2Index > -1) { 
+            for (int fb = 0; fb < attrs.size(); fb++) { 
+              if (attrs.get(fb).getID() == fxAttr) { 
+                System.out.println(t + " " +  
+                     attrs.get(fb).getName1().replace("_", " ") + " " +  
+                     nodes.get(fx2Index).getNodeName().replace("_", " ")); 
+                for (int tx=0; tx<nodeStack.size(); tx++) { 
+                  if (nodeStack.get(tx).equals(nodes.get(fx2Index).getNodeName())) { 
+                    nodeExists = true; 
+                  } 
+                } 
+                if (!nodeExists){
+                  nodeStack.add(nodes.get(fx2Index).getNodeName());
+                  log ("Nodestack.add "+nodes.get(fx2Index).getNodeName());
+                } //orange 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+    nodeExists = true; 
+  } 
+  return nodeExists; 
+  } 
 
   public boolean describeAttr(String t) {
     boolean attrExists = false;
@@ -508,14 +444,12 @@ public class Factbase {
     if (dd >= 0) {
       System.out.println(t + " is an attribute");
       attrExists = true;
-      int currentAttrID = attrIDs.get(dd);
+      int currentAttrID = attrs.get(dd).getID();
       // and print all edges
-      if (numEdges > 0) {
-        for (int fe = 0; fe < numEdges; fe++) {
-          boolean ok = printEdgeByIndexAndAttrAID(fe, currentAttrID);
-          if (ok) {
-            attrExists = true;
-          }
+      for (int fe = 0; fe < edges.size(); fe++) {
+        boolean ok = printEdgeByIndexAndAttrAID(fe, currentAttrID);
+        if (ok) {
+          attrExists = true;
         }
       }
     }
@@ -524,10 +458,10 @@ public class Factbase {
 
   void describeAllNodes() {
     System.out.println();
-    System.out.println("Describing all " + (numNodes) + " nodes:");
+    System.out.println("Describing all " + (nodes.size()) + " nodes:");
     System.out.println();
-    for (int da = 0; da < numNodes; da++) {
-      describe(nodeNames.get(da));
+    for (int da = 0; da < nodes.size(); da++) {
+      describe(nodes.get(da).getNodeName());
       System.out.println();
     }
   }
@@ -536,9 +470,10 @@ public class Factbase {
     boolean ok = false;
     // edge: e::ID::srcNodeID::dstNodeID::attrID
     // int fxEdge = edgeIDs.get(fe);
-    int fxNode1 = edgeANodes.get(fe);
-    int fxNode2 = edgeBNodes.get(fe);
-    int fxAttr = edgeAttrs.get(fe);
+    Edge ed = edges.get(fe);
+    int fxNode1 = ed.getN1().getID();
+    int fxNode2 = ed.getN2().getID();
+    int fxAttr = ed.getA1().getID();
     boolean found1 = false;
     boolean found2 = false;
     boolean foundAttr = false;
@@ -550,19 +485,19 @@ public class Factbase {
         String fxNodeName1 = "";
         String fxNodeName2 = "";
         String fxAttrLabel = "";
-        for (int fb = 0; fb < numNodes; fb++) {
-          if (nodeIDs.get(fb) == fxNode1) {
-            fxNodeName1 = nodeNames.get(fb).replace("_", " ");
+        for (int fb = 0; fb < nodes.size(); fb++) {
+          if (nodes.get(fb).getID() == fxNode1) {
+            fxNodeName1 = nodes.get(fb).getNodeName().replace("_", " ");
             found1 = true;
           }
-          if (nodeIDs.get(fb) == fxNode2) {
-            fxNodeName2 = nodeNames.get(fb).replace("_", " ");
+          if (nodes.get(fb).getID() == fxNode2) {
+            fxNodeName2 = nodes.get(fb).getNodeName().replace("_", " ");
             found2 = true;
           }
         }
-        for (int fb = 0; fb < numAttrs; fb++) {
-          if (nodeIDs.get(fb) == fxAttr) {
-            fxAttrLabel = attrLabelAs.get(fb).replace("_", " ");
+        for (int fb = 0; fb < attrs.size(); fb++) {
+          if (nodes.get(fb).getID() == fxAttr) {
+            fxAttrLabel = attrs.get(fb).getName1().replace("_", " ");
             foundAttr = true;
           }
         }
@@ -579,9 +514,10 @@ public class Factbase {
 
   String descEdgeByIndex(int fe) {
     String retval = "";
-    int fxNode1 = edgeANodes.get(fe);
-    int fxNode2 = edgeBNodes.get(fe);
-    int fxAttr = edgeAttrs.get(fe);
+    Edge ed = edges.get(fe);
+    int fxNode1 = ed.getN1().getID();
+    int fxNode2 = ed.getN2().getID();
+    int fxAttr = ed.getA1().getID();
     int fx1Index = getNodeIndexByID(fxNode1);
     int fx2Index = getNodeIndexByID(fxNode2);
     int fxAttrIndex = getAttrIndexByID(fxAttr);
@@ -589,9 +525,9 @@ public class Factbase {
       String fxNodeName1 = "";
       String fxNodeName2 = "";
       String fxAttrLabel = "";
-      fxNodeName1 = nodeNames.get(fx1Index).replace("_", " ");
-      fxNodeName2 = nodeNames.get(fx2Index).replace("_", " ");
-      fxAttrLabel = attrLabelAs.get(fxAttrIndex).replace("_", " ");
+      fxNodeName1 = nodes.get(fx1Index).getNodeName().replace("_", " ");
+      fxNodeName2 = nodes.get(fx2Index).getNodeName().replace("_", " ");
+      fxAttrLabel = attrs.get(fxAttrIndex).getName1().replace("_", " ");
       retval = (fxNodeName1 + " " + fxAttrLabel + " " + fxNodeName2);
     }
     return retval;
@@ -607,13 +543,13 @@ public class Factbase {
     int fxAttrIndex = getAttrIndexByID(maybeAttr);
     if ((fx2Index > -1) && (fxAttrIndex > -1)) {
       boolean found = false;
-      for (int k = 0; k < numEdges; k++) {
-        if ((edgeAttrs.get(k) == maybeAttr)
-            && (edgeBNodes.get(k) == maybeNode2)) {
-          fx1Index = getNodeIndexByID(edgeANodes.get(k));
-          String fxNodeName1 = nodeNames.get(fx1Index).replace("_", " ");
-          String fxNodeName2 = nodeNames.get(fx2Index).replace("_", " ");
-          String fxAttrLabel = attrLabelAs.get(fxAttrIndex).replace("_", " ");
+      for (int k = 0; k < edges.size(); k++) {
+        if ((edges.get(k).getA1().getID() == maybeAttr)
+            && (edges.get(k).getN2().getID() == maybeNode2)) {
+          fx1Index = getNodeIndexByID(edges.get(k).getN1().getID());
+          String fxNodeName1 = nodes.get(fx1Index).getNodeName().replace("_", " ");
+          String fxNodeName2 = nodes.get(fx2Index).getNodeName().replace("_", " ");
+          String fxAttrLabel = attrs.get(fxAttrIndex).getName1().replace("_", " ");
           System.out.println("a>b: "+fxNodeName1 + " " + fxAttrLabel + " "
               + fxNodeName2);
           // found = true;
@@ -629,37 +565,6 @@ public class Factbase {
     return retval;
   }
 
-  boolean printEdgeByAttrLabelAndNodeBName(String attr, String node) {
-    boolean retval = false;
-    //System.out.println("printEdgeByAttrLabelAndNodeName(" + attr + ", " + node + ")");
-    int maybeAttr = getAttrIDByLabel(attr);
-    int maybeNode1 = nodeIDByName(node);
-    int fx2Index = -1;
-    int fx1Index = getNodeIndexByID(maybeNode1);
-    int fxAttrIndex = getAttrIndexByID(maybeAttr);
-    if ((fx1Index > -1) && (fxAttrIndex > -1)) {
-      boolean found = false;
-      for (int k = 0; k < numEdges; k++) {
-        if ((edgeAttrs.get(k) == maybeAttr)
-            && (edgeBNodes.get(k) == maybeNode1)) {
-          fx1Index = getNodeIndexByID(edgeANodes.get(k));
-          String fxNodeName1 = nodeNames.get(fx1Index).replace("_", " ");
-          String fxNodeName2 = nodeNames.get(fx2Index).replace("_", " ");
-          String fxAttrLabel = attrLabelAs.get(fxAttrIndex).replace("_", " ");
-          System.out.println("b>a: "+fxNodeName2 + " " + fxAttrLabel + " "
-              + fxNodeName1);
-          // found = true;
-          retval = true;
-        }
-      }
-      if (!found) {
-        // System.out.println("None");
-      }
-    } else {
-      // System.out.println("None");
-    }
-    return retval;
-  }
 
   /*************** Helpers ***************/
 
@@ -674,7 +579,6 @@ public class Factbase {
           if (t[0].equals("n")) {
             addNode(t[1], t[2]);
           }
-          // 9/23 added length check
           if (t[0].equals("a")) {
             if (t.length==3) {
               addAttr(Integer.parseInt(t[1]), t[2]);
@@ -693,29 +597,28 @@ public class Factbase {
   public void loadText(String fileName) {
     String s = "";
     try {
+      log();
       s=fileName.replace("load ", "");
-      System.out.println("loadText: attempting to open "+s);
+      logAndPrint("loadText: attempting to open "+s);
       BufferedReader itemfile = new BufferedReader(new FileReader(s));
-      System.out.println("loadText: reading "+s);
+      logAndPrint("loadText: reading "+s);
       while ((s = itemfile.readLine()) != null) {
         parse(s);
       }
       itemfile.close();
     } catch (Exception ef) {
-      System.out.println("loadText: unhappy!");
-      System.out.println(ef);
+      logAndPrint("loadText: unhappy!");
+      logAndPrint(ef.toString());
     }
   }
   
   public boolean nodeExists(String ts_name) {
     boolean retval = false;
-    if (numNodes > 0) {
-      for (int t = 0; t < numNodes; t++) {
-        String q = nodeNames.get(t);
-        if (q.equals(ts_name)) {
-          retval = true;
-          t = numNodes;
-        }
+    for (int t = 0; t < nodes.size(); t++) {
+      String q = nodes.get(t).getNodeName();
+      if (q.equals(ts_name)) {
+        retval = true;
+        t = t + nodes.size();
       }
     }
     return retval;
@@ -723,13 +626,11 @@ public class Factbase {
 
   public int nodeIDByName(String ts_name) {
     int retval = -1;
-    if (numNodes > 0) {
-      for (int t = 0; t < numNodes; t++) {
-        String q = nodeNames.get(t);
-        if (q.equals(ts_name)) {
-          retval = nodeIDs.get(t);
-          t = numNodes;
-        }
+    for (int t = 0; t < nodes.size(); t++) {
+      String q = nodes.get(t).getNodeName();
+      if (q.equals(ts_name)) {
+        retval = nodes.get(t).getID();
+        t = t + nodes.size();
       }
     }
     return retval;
@@ -737,27 +638,23 @@ public class Factbase {
 
   public int nodeIndex(String ts_name) {
     int retval = -1;
-    if (numNodes > 0) {
-      for (int t = 0; t < numNodes; t++) {
-        String q = nodeNames.get(t);
-        if (q.equals(ts_name)) {
-          retval = t;
-          t = numNodes;
-        }
+    for (int t = 0; t < nodes.size(); t++) {
+      String q = nodes.get(t).getNodeName();
+      if (q.equals(ts_name)) {
+        retval = t;
+        t = t + nodes.size();
       }
     }
     return retval;
   }
-
+  
   public boolean nodeIDExists(int ts_node) {
     boolean retval = false;
-    if (numNodes > 0) {
-      for (int t = 0; t < numNodes; t++) {
-        int q = nodeIDs.get(t);
-        if (q == (ts_node)) {
-          retval = true;
-          t = numNodes;
-        }
+    for (int t = 0; t < nodes.size(); t++) {
+      int q = nodes.get(t).getID();
+      if (q == (ts_node)) {
+        retval = true;
+        t = t + nodes.size();
       }
     }
     return retval;
@@ -765,40 +662,33 @@ public class Factbase {
 
   public int getNodeIndexByID(int ts_node) {
     int retval = -1;
-    if (numNodes > 0) {
-      for (int t = 0; t < numNodes; t++) {
-        int q = nodeIDs.get(t);
+      for (int t = 0; t < nodes.size(); t++) {
+        int q = nodes.get(t).getID();
         if (q == (ts_node)) {
           retval = t;
-          t = numNodes;
+          t = t + nodes.size();
         }
       }
-    }
     return retval;
   }
 
   public void addNode(String ts_id, String ts_name) {
     if (!(nodeExists(ts_name))) {
-      nodeNames.add(ts_name);
-      nodeIDs.add(Integer.parseInt(ts_id));
-      numItems = numItems + 1;
-      numNodes = numNodes + 1;
+      nodes.add(new Node("Generic Node",ts_name,Integer.parseInt(ts_id)));
     }
   }
 
   public void addNode(String ts_name) {
-    addNode(Integer.toString(numItems),ts_name);
+    addNode(Integer.toString(nextID()),ts_name);
   }
 
   public boolean attrAExists(String ts_name) {
     boolean retval = false;
-    if (numAttrs > 0) {
-      for (int t = 0; t < numAttrs; t++) {
-        String q = attrLabelAs.get(t);
-        if (q.equals(ts_name)) {
-          retval = true;
-          t = numAttrs;
-        }
+      for (int t = 0; t < attrs.size(); t++) {
+      String q = attrs.get(t).getName1();
+      if (q.equals(ts_name)) {
+        retval = true;
+        t = t + attrs.size();
       }
     }
     return retval;
@@ -806,28 +696,24 @@ public class Factbase {
 
   public int attrIndex(String ts_name) {
     int retval = -1;
-    if (numAttrs > 0) {
-      for (int t = 0; t < numAttrs; t++) {
-        String q = ""; 
-        q = attrLabelAs.get(t);
-        if (q.equals(ts_name)) {
-          retval = t;
-        }
-        if (retval>=0) {t = numAttrs;}
+    for (int t = 0; t < attrs.size(); t++) {
+      String q = ""; 
+      q = attrs.get(t).getName1();
+      if (q.equals(ts_name)) {
+        retval = t;
       }
+      if (retval>=0) {t = t + attrs.size();}
     }
     return retval;
   }
 
   public int getAttrIndexByID(int ts_attr) {
     int retval = -1;
-    if (numAttrs > 0) {
-      for (int t = 0; t < numAttrs; t++) {
-        int q = attrIDs.get(t);
-        if (q == (ts_attr)) {
-          retval = t;
-          t = numAttrs;
-        }
+    for (int t = 0; t < attrs.size(); t++) {
+      int q = attrs.get(t).getID();
+      if (q == (ts_attr)) {
+        retval = t;
+        t = t + attrs.size();
       }
     }
     return retval;
@@ -835,13 +721,11 @@ public class Factbase {
 
   public boolean attrIDExists(int ts_attr) {
     boolean retval = false;
-    if (numAttrs > 0) {
-      for (int t = 0; t < numAttrs; t++) {
-        int q = attrIDs.get(t);
-        if (q == (ts_attr)) {
-          retval = true;
-          t = numAttrs;
-        }
+    for (int t = 0; t < attrs.size(); t++) {
+      int q = attrs.get(t).getID();
+      if (q == (ts_attr)) {
+        retval = true;
+        t = t + attrs.size();
       }
     }
     return retval;
@@ -849,110 +733,126 @@ public class Factbase {
 
   public int getAttrByID(int ts_attr) {
     int retval = -1;
-    if (numAttrs > 0) {
-      for (int t = 0; t < numAttrs; t++) {
-        int q = nodeIDs.get(t);
+      for (int t = 0; t < attrs.size(); t++) {
+        int q = attrs.get(t).getID();
         if (q == (ts_attr)) {
           retval = t;
-          t = numAttrs;
+          t = t + attrs.size();
         }
       }
-    }
     return retval;
   }
 
   public int getAttrIDByLabel(String ts_attr) {
     int retval = -1;
-    if (numAttrs > 0) {
-      for (int t = 0; t < numAttrs; t++) {
-        String q = ""; 
-        if (retval==-1) {
-          q = attrLabelAs.get(t);
-          if (q.equals(ts_attr)) {
-            int r = attrIDs.get(t);
-            retval = r;
-          }
+    for (int t = 0; t < attrs.size(); t++) {
+      String q = ""; 
+      if (retval==-1) {
+        q = attrs.get(t).getName1();
+        if (q.equals(ts_attr)) {
+          int r = attrs.get(t).getID();
+          retval = r;
+          t = t + attrs.size();
         }
       }
     }
     return retval;
   }
   
+  int nextID=0;
+  public int nextID() {
+    return nextID++;
+  }
+  
   public void addAttr(int ts_id, String ts_label) {
     if (!(attrAExists(ts_label))) {
-      attrLabelAs.add(ts_label);
-      attrIDs.add(ts_id);
-      numItems = numItems + 1;
-      numAttrs = numAttrs + 1;
+      attrs.add(new Attr("definition", ts_label, ts_id));
     }
   }
 
   public void addAttr(String ts_name) {
-    //System.out.println("Adding attr: "+ts_name+"/is");
-    addAttr(numItems,ts_name);
+    addAttr(nextID(), ts_name);
   }
 
   public void addEdge(String ts_id, String ts_NodeA, String ts_NodeB, String ts_attr) {
     int maybeNodeA = Integer.parseInt(ts_NodeA);
     int maybeNodeB = Integer.parseInt(ts_NodeB);
     int maybeAttr = Integer.parseInt(ts_attr);
-    // if ((nodeIDExists(maybeNodeA))&&
-    // (nodeIDExists(maybeNodeB))&&
-    // (attrIDExists(maybeAttr))) {
-    edgeIDs.add(Integer.parseInt(ts_id));
-    edgeANodes.add(maybeNodeA);
-    edgeBNodes.add(maybeNodeB);
-    edgeAttrs.add(maybeAttr);
+     if ((nodeIDExists(maybeNodeA))&&
+     (nodeIDExists(maybeNodeB))&&
+     (attrIDExists(maybeAttr))) {
+      edges.add(new Edge(nodes.get(maybeNodeA),nodes.get(maybeNodeB),attrs.get(maybeAttr),nextID()));
     //System.out.println("Added edge: "+ts_NodeA+" "+ts_attr+" "+ts_NodeB);
-    numItems = numItems + 1;
-    numEdges = numEdges + 1;
-    // }
+     }
   }
 
   public void listNodes() {
-    System.out.println(numNodes+" nodes:");
-    for (int t = 0; t < numNodes; t++) {
-      String rn = nodeNames.get(t).replace("_", " ");
+    System.out.println(nodes.size()+" nodes:");
+    for (int t = 0; t < nodes.size(); t++) {
+      String rn = nodes.get(t).getNodeName().replace("_", " ");
       System.out.println(rn);
     }
   }
   
   public void listAttrs() {
-    System.out.println(numAttrs+" attributes:");
-    for (int t = 0; t < numAttrs; t++) {
-      String rn = attrLabelAs.get(t).replace("_", " ");
+    System.out.println(attrs.size()+" attributes:");
+    for (int t = 0; t < attrs.size(); t++) {
+      String rn = attrs.get(t).getName1().replace("_", " ");
       System.out.println("\""+rn+"\"");
     }
   }
 
   public void listEdges() {
-    System.out.println(numEdges+" edges:");
-    for (int t = 0; t < numEdges; t++) {
+    System.out.println(edges.size()+" edges:");
+    for (int t = 0; t < edges.size(); t++) {
       System.out.println(descEdgeByIndex(t));
     }
   }
 
+  public Node getNode(String n) {
+    Node retval = null;
+    Node w = null;
+      for (int t=0; t<nodes.size(); t++) {
+        w=nodes.get(t);
+        if (w.getNodeName().equals(n)) {
+          retval = w;
+          t=t+nodes.size();
+        }
+      }
+    return retval;
+  }
+  
+  public Attr getAttr(String n) {
+    Attr retval = null;
+    Attr w = null;
+      for (int t=0; t<attrs.size(); t++) {
+        w=attrs.get(t);
+        if (w.getName1().equals(n)) {
+          retval = w;
+          t=t+attrs.size();
+        }
+      }
+    return retval;
+  }
+  
   public void saveAll() {
+    // node: n::ID::label::name
+    // attribute: a::ID::label::name
+    // edge: e::ID::srcNodeID::dstNodeID::attrID
     try {
       //BufferedWriter itemfile = new BufferedWriter(new FileWriter("itemsOut.txt"));
       BufferedWriter itemfile = new BufferedWriter(new FileWriter("fbitems.txt"));
-      for (int t = 0; t < numNodes; t++) {
-        String rn = nodeNames.get(t).replace(" ", "_");
-        Integer rc = nodeIDs.get(t) + 0000;
-        itemfile.write("n::" + rc + "::" + rn + "\n");
+      for (int t = 0; t < nodes.size(); t++) {
+        Node qq=nodes.get(t);
+        itemfile.write(qq.toFbItem()+ "\n");
       }
-      for (int t = 0; t < numAttrs; t++) {
-        String rn1 = attrLabelAs.get(t).replace(" ", "_");
-        Integer rc = attrIDs.get(t) + 0000;
-        itemfile.write("a::" + rc + "::" + rn1 + "\n");
+      for (int t = 0; t < attrs.size(); t++) {
+        Attr qq = attrs.get(t);
+        itemfile.write(qq.toFbItem()+ "\n");
       }
-      for (int t = 0; t < numEdges; t++) {
-        Integer rid = edgeIDs.get(t) + 0000;
-        Integer ra = edgeANodes.get(t) + 0000;
-        Integer rb = edgeBNodes.get(t) + 0000;
-        Integer rattr = edgeAttrs.get(t) + 0000;
-        String x = descEdgeByIndex(t);
-        itemfile.write("e::" + rid + "::" + ra + "::" + rb + "::" + rattr + "::" + x + "\n");
+      for (int t = 0; t < edges.size(); t++) {
+        Edge qq = edges.get(t);
+        itemfile.write(qq.toFbItem()+ "\n");
       }
       itemfile.close();
     } catch (Exception ef) {
@@ -961,28 +861,70 @@ public class Factbase {
   
   public void saveAllFacts() {
     try {
-      BufferedWriter itemfile = new BufferedWriter(new FileWriter("factsOut.txt"));
-      for (int t = 0; t < numNodes; t++) {
-        String rn = nodeNames.get(t).replace(" ", "_");
-        itemfile.write("add " + rn + "\n");
+      BufferedWriter itemfile = new BufferedWriter(new FileWriter("ObjFactsOut.txt"));
+      for (int t=0; t<nodes.size(); t++) {
+        itemfile.write(nodes.get(t).toCommand()+ "\n");
       }
-      for (int t = 0; t < numAttrs; t++) {
-        String rn1 = attrLabelAs.get(t).replace(" ", "_");
-        itemfile.write("attr " + rn1 + "\n");
+      for (int t=0; t<attrs.size(); t++) {
+        itemfile.write(attrs.get(t).toCommand()+ "\n");
       }
-      for (int t = 0; t < numEdges; t++) {
-        String x = descEdgeByIndex(t);
-        itemfile.write(x + "\n");
+      for (int t=0; t<edges.size(); t++) {
+        itemfile.write(edges.get(t).toCommand()+ "\n");
       }
       itemfile.close();
     } catch (Exception ef) {
     }
   }
 
+  BufferedWriter logfile;  
+  boolean logOpen = false;
+
+  public void openLog() {
+    if (!(logOpen)) {
+      try {
+        logfile = new BufferedWriter(new FileWriter("log.txt"));
+        logOpen = true;
+      } catch (Exception e) {
+        //
+      }
+    }
+  }
+  
+  public void logAndPrint(String s) {
+    log(s);
+    System.out.println(s);
+  }
+  
+    public void log() {
+    log("");
+  }
+  
+  public void log(String s) {
+    if (logOpen) {
+      try {
+        logfile.write(s + "\n");
+        logfile.flush();
+      } catch (Exception e) {
+        //
+      }
+    }
+  }
+  
+  public void closeLog() {
+    if (logOpen) {
+      try {
+        logfile.close();
+      } catch (Exception e) {
+        //
+      }
+    }
+  }
+  
   public void cleanup() {
     System.out.print("Cleaning up...");
     saveAll();
     saveAllFacts();
+    closeLog();
     System.out.println("Done");
   }
 
