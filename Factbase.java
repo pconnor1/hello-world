@@ -113,12 +113,14 @@ public class Factbase {
     }
     if ((!parsed) && (i.contains("add "))) {
       // System.out.println(i+": not implemented");
-      nodes.add(new Node("Generic Node",i.replace("add ",""),nextID()));
+      add(i.replace("add ",""));
+      //nodes.add(new Node("Generic Node",i.replace("add ",""),nextID()));
       parsed = true;
     }
     //attr
     if ((!parsed) && (i.contains("attr "))) {
-      attrs.add(new Attr("definition", i.replace("attr ",  ""), nextID()));
+      addAttr(i.replace("attr ",""));
+      //attrs.add(new Attr("definition", i.replace("attr ",  ""), nextID()));
       parsed = true;
     }
     if ((!parsed) && (i.contains("describe all"))) {
@@ -194,8 +196,8 @@ public class Factbase {
     parse2output = parse2output + ("\nP1A:    clean: \""+k+"\""+"\n");
     for (int t=0; t<nodes.size(); t++) {
       String k2=nodes.get(t).getNodeName();
-      parse2output = parse2output + ("P1A:(n)     Does k: "+k+"\n");
-      parse2output = parse2output + ("P1A:(n) contain k2: "+k2+"\n");
+      //parse2output = parse2output + ("P1A:(n)     Does k: "+k+"\n");
+      //parse2output = parse2output + ("P1A:(n) contain k2: "+k2+"\n");
       if (k.contains(k2)) {
         parse2output = parse2output + ("P1A:(n) Node "+k2+"\n");
         ktemp = k2.replace("_", " ");
@@ -204,8 +206,8 @@ public class Factbase {
     }
     for (int t=0; t<attrs.size(); t++) {
       String k2=attrs.get(t).getName1();
-      parse2output = parse2output + ("P1A:(a)     Does k: "+k+"\n");
-      parse2output = parse2output + ("P1A:(a) contain k2: "+k2+"\n");
+      //parse2output = parse2output + ("P1A:(a)     Does k: "+k+"\n");
+      //parse2output = parse2output + ("P1A:(a) contain k2: "+k2+"\n");
       if (k.contains(k2)) {
         parse2output = parse2output + ("P1A:(a) Attr "+k2+"\n");
         ktemp = k2.replace("_", " ");
@@ -272,7 +274,7 @@ public class Factbase {
         addNode(i[2]);
         String retmsg = "Added node: "+i[2];
         parse2output = parse2output + retmsg;
-        logAndPrint(retmsg.trim().replace("_", " "));
+        log(retmsg.trim().replace("_", " "));
         Node nodestAA=getNode(i[0]);
         Node nodestAB=getNode(i[2]);
         Attr attrstAA=getAttr(i[1]);
@@ -284,7 +286,7 @@ public class Factbase {
         }
         retmsg = "Added edge: \"" + i[0] + " " + i[1] + " " + i[2] + "\" ";
         parse2output = parse2output + retmsg;
-        logAndPrint(retmsg.trim().replace("_", " "));
+        log(retmsg.trim().replace("_", " "));
         retval = true;
       }
       if (pattern.equals("NAN")) {
@@ -330,7 +332,6 @@ public class Factbase {
     String t1 = s.replaceAll("  ", " ").replace("add ", "");
     String t = t1.replace(" ", "_");
     addNode(t);
-    System.out.println("Added node: " + t1);
   }
 
   public void attr(String s) {
@@ -359,7 +360,8 @@ public class Factbase {
     // if item is a node describe it
     boolean isNode = false;
     boolean isAttr = false;
-    String t = ds.replace("describe ", "");
+    String t = ds.replace("describe ", "").replace(" ", "_");
+    //log("Describe: "+t);
     isNode = nodeExists(t);
     isAttr = attrAExists(t);
     if (!((isNode) || (isAttr))) {
@@ -673,8 +675,12 @@ public class Factbase {
   }
 
   public void addNode(String ts_id, String ts_name) {
+    log("addNode: Adding: "+ts_name);
     if (!(nodeExists(ts_name))) {
       nodes.add(new Node("Generic Node",ts_name,Integer.parseInt(ts_id)));
+      System.out.println("Added node: " + ts_name);
+    } else {
+      logAndPrint(ts_name+" already exists.");
     }
   }
 
@@ -861,7 +867,7 @@ public class Factbase {
   
   public void saveAllFacts() {
     try {
-      BufferedWriter itemfile = new BufferedWriter(new FileWriter("ObjFactsOut.txt"));
+      BufferedWriter itemfile = new BufferedWriter(new FileWriter("factsOut.txt"));
       for (int t=0; t<nodes.size(); t++) {
         itemfile.write(nodes.get(t).toCommand()+ "\n");
       }
