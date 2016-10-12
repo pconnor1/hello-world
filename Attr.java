@@ -36,14 +36,17 @@ public class Attr extends Fact {
   }
 
   public String toCommand() {
-    return ("attr "+Label.replace(" ", "_")+" "+Name1.replace(" ", "_"));
+    //con label return ("attr "+Label.replace(" ", "_")+" "+Name1.replace(" ", "_"));
+    return ("attr "+Name1.replace(" ", "_"));
   }
 
   public String toString() {
-    return (Label+" "+Name1);
+    //con label return (Label+" "+Name1);
+    return (Name1);
   }
 
   public String toFbItem() {
-    return ("a::"+ID+"::"+Label.replace(" ", "_")+"::"+Name1.replace(" ", "_"));
+    //con label return ("a::"+ID+"::"+Label.replace(" ", "_")+"::"+Name1.replace(" ", "_"));
+    return ("a::"+ID+"::"+Name1.replace(" ", "_"));
   }
 }
